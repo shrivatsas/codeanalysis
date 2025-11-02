@@ -1,0 +1,23 @@
+version: "3"
+
+tasks:
+  deps:
+    desc: Install or refresh Python dependencies using uv.
+    cmds:
+      - uv sync
+
+  format:
+    desc: Auto-format code with Ruff and Black via uv.
+    cmds:
+      - uv run ruff --fix .
+      - uv run black .
+
+  test:
+    desc: Run the pytest suite with coverage through uv.
+    cmds:
+      - uv run pytest
+
+  data-check:
+    desc: Validate analytics datasets and schemas.
+    cmds:
+      - uv run python -m src.analytics.validators
