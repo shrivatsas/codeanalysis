@@ -9,7 +9,7 @@ tasks:
   format:
     desc: Auto-format code with Ruff and Black via uv.
     cmds:
-      - uv run ruff --fix .
+      - uv run ruff check --fix .
       - uv run black .
 
   test:
