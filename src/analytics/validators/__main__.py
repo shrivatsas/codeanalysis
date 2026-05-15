@@ -1,12 +1,14 @@
 """Command entry point for analytics validation."""
 
+from contextlib import closing
+
+from src.analytics.database import apply_migrations, connect_database
+
 
 def main() -> int:
-    """Run lightweight validation checks.
-
-    Phase 2 only creates the project skeleton. Real schema and dataset
-    validation will be added with the SQLite migration work.
-    """
+    """Validate that bundled SQLite migrations apply cleanly."""
+    with closing(connect_database(":memory:", enable_wal=False)) as connection:
+        apply_migrations(connection)
     return 0
 
 
