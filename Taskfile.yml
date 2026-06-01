@@ -2,9 +2,9 @@ version: "3"
 
 tasks:
   deps:
-    desc: Install or refresh Python dependencies using uv.
+    desc: Install or refresh Python dependencies using uv, including dev tools.
     cmds:
-      - uv sync
+      - uv sync --extra dev
 
   format:
     desc: Auto-format code with Ruff and Black via uv.
