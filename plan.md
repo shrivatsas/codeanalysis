@@ -2,8 +2,8 @@
 
 ## Current State
 
-- Repository is clean on `main` and aligned with `origin/main`.
-- Test suite is passing: `17 passed`, `92%` coverage.
+- Repository is on `main` and aligned with `origin/main` after the latest dashboard changes.
+- Test suite is passing: `22 passed`, `90%` coverage.
 - Implemented:
   - SQLite connection and migration helpers in `src/analytics/database.py`
   - Initial schema and analytics views in `schema/0001_initial.sql`
@@ -13,8 +13,13 @@
   - Static file metrics collection in `src/analytics/static_metrics.py`
   - CLI entrypoint for static metrics collection in `src/cli/cmd_collect_metrics.py`
   - Schema validation entrypoint in `src/analytics/validators/__main__.py`
+- Implemented dashboard application in `src/dashboards/` with:
+  - repository selection on the home page
+  - a compact counts summary line
+  - risk, hotspot, ownership, and file detail views
+  - table filtering and ordering controls
+  - an inline favicon
 - Not yet implemented:
-  - Dashboard application
   - CI, issue, dependency, and runtime ingestion
   - Packaging, deployment, and backup documentation
 
@@ -117,6 +122,9 @@ Expose the analytics in a simple local web UI that does not require external BI 
 ### Exit Criteria
 - A user can open the local app and inspect the top-risk files and file detail views.
 
+### Status
+- Complete.
+
 ## Phase 5: Expand Ingestion Sources
 
 ### Goal
@@ -179,6 +187,5 @@ Make the project easy to run, inspect, and recover in a single-instance setup.
 
 ## Suggested Execution Order
 
-1. Local dashboard
-2. Optional ingestion sources
-3. Packaging and operations
+1. Optional ingestion sources
+2. Packaging and operations
