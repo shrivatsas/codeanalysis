@@ -3,17 +3,17 @@
 ## Current State
 
 - Repository is clean on `main` and aligned with `origin/main`.
-- Test suite is passing: `13 passed`, `92%` coverage.
+- Test suite is passing: `17 passed`, `92%` coverage.
 - Implemented:
   - SQLite connection and migration helpers in `src/analytics/database.py`
   - Initial schema and analytics views in `schema/0001_initial.sql`
+  - Risk scoring and leaderboard views in `schema/0002_risk_scoring.sql`
   - Local Git ingestion in `src/ingestion/git_loader.py`
   - CLI entrypoint for local repository ingestion in `src/cli/cmd_ingest_git.py`
   - Static file metrics collection in `src/analytics/static_metrics.py`
   - CLI entrypoint for static metrics collection in `src/cli/cmd_collect_metrics.py`
   - Schema validation entrypoint in `src/analytics/validators/__main__.py`
 - Not yet implemented:
-  - Risk scoring beyond SQL hotspot views
   - Dashboard application
   - CI, issue, dependency, and runtime ingestion
   - Packaging, deployment, and backup documentation
@@ -90,6 +90,9 @@ Turn raw churn and static metrics into explainable ranked outputs.
 ### Exit Criteria
 - Risk-related queries are available without application-side reconstruction.
 - The score outputs are understandable from the underlying fields.
+
+### Status
+- Complete.
 
 ## Phase 4: Local Dashboard
 
@@ -176,7 +179,6 @@ Make the project easy to run, inspect, and recover in a single-instance setup.
 
 ## Suggested Execution Order
 
-1. Analytics and risk scoring
-2. Local dashboard
-3. Optional ingestion sources
-4. Packaging and operations
+1. Local dashboard
+2. Optional ingestion sources
+3. Packaging and operations
