@@ -3,7 +3,7 @@
 ## Current State
 
 - Repository is on `main` and aligned with `origin/main` after the latest dashboard changes.
-- Test suite is passing: `22 passed`, `90%` coverage.
+- Test suite is passing: `24 passed`, `90%` coverage.
 - Implemented:
   - SQLite connection and migration helpers in `src/analytics/database.py`
   - Initial schema and analytics views in `schema/0001_initial.sql`
@@ -19,9 +19,11 @@
   - risk, hotspot, ownership, and file detail views
   - table filtering and ordering controls
   - an inline favicon
+- Implemented coverage artifact ingestion in `src/ingestion/coverage_loader.py`
+  with a CLI entrypoint in `src/cli/cmd_ingest_coverage.py`
 - Not yet implemented:
-  - CI, issue, dependency, and runtime ingestion
   - Packaging, deployment, and backup documentation
+  - CI, issue, dependency, and runtime ingestion
 
 ## Phase 1: Stabilize The Core
 
@@ -147,6 +149,9 @@ Add optional sources without destabilizing the core Git-and-SQLite workflow.
 ### Exit Criteria
 - At least one non-Git source is modeled end-to-end without affecting the core ingest path.
 
+### Status
+- Complete.
+
 ## Phase 6: Packaging And Operations
 
 ### Goal
@@ -187,5 +192,4 @@ Make the project easy to run, inspect, and recover in a single-instance setup.
 
 ## Suggested Execution Order
 
-1. Optional ingestion sources
-2. Packaging and operations
+1. Packaging and operations
