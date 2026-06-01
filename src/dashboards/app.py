@@ -12,6 +12,11 @@ from urllib.parse import parse_qs, quote, urlencode
 from wsgiref.simple_server import make_server
 
 from src.analytics.database import DEFAULT_DB_PATH, apply_migrations, connect_database
+from src.config import (
+    default_dashboard_host,
+    default_dashboard_port,
+    default_db_path,
+)
 
 _HEADER_COLUMNS = (
     "Rank",
@@ -1139,11 +1144,14 @@ def create_dashboard_app(connection: sqlite3.Connection) -> DashboardApplication
 
 
 def serve_dashboard(
-    db_path: str | Path = DEFAULT_DB_PATH,
+    db_path: str | Path | None = None,
     *,
-    host: str = "127.0.0.1",
-    port: int = 8000,
+    host: str | None = None,
+    port: int | None = None,
 ) -> None:
+    db_path = default_db_path() if db_path is None else db_path
+    host = default_dashboard_host() if host is None else host
+    port = default_dashboard_port() if port is None else port
     with closing(connect_database(db_path)) as connection:
         apply_migrations(connection)
         app = create_dashboard_app(connection)

@@ -2,8 +2,8 @@
 
 ## Current State
 
-- Repository is on `main` and aligned with `origin/main` after the latest dashboard changes.
-- Test suite is passing: `24 passed`, `90%` coverage.
+- Repository is on `main` and aligned with `origin/main` after the latest ops/docs changes.
+- Test suite is passing: `27 passed`, `90%` coverage.
 - Implemented:
   - SQLite connection and migration helpers in `src/analytics/database.py`
   - Initial schema and analytics views in `schema/0001_initial.sql`
@@ -21,8 +21,11 @@
   - an inline favicon
 - Implemented coverage artifact ingestion in `src/ingestion/coverage_loader.py`
   with a CLI entrypoint in `src/cli/cmd_ingest_coverage.py`
+- Implemented runtime configuration helpers in `src/config.py` with env-driven
+  defaults for database path, dashboard host, and dashboard port
+- Added operational documentation in `README.md`
+- Added a `task dashboard` shortcut for the local web UI
 - Not yet implemented:
-  - Packaging, deployment, and backup documentation
   - CI, issue, dependency, and runtime ingestion
 
 ## Phase 1: Stabilize The Core
@@ -171,6 +174,9 @@ Make the project easy to run, inspect, and recover in a single-instance setup.
 ### Exit Criteria
 - A new user can install, ingest, and query the project using only the documented local workflow.
 
+### Status
+- Complete.
+
 ## Test Plan
 
 - Keep the full `pytest` suite green.
@@ -192,4 +198,4 @@ Make the project easy to run, inspect, and recover in a single-instance setup.
 
 ## Suggested Execution Order
 
-1. Packaging and operations
+No remaining planned phases.

@@ -21,3 +21,8 @@ tasks:
     desc: Validate analytics datasets and schemas.
     cmds:
       - uv run python -m src.analytics.validators
+
+  dashboard:
+    desc: Serve the local dashboard.
+    cmds:
+      - uv run python -m src.cli.cmd_serve_dashboard

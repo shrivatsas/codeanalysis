@@ -7,6 +7,7 @@ from contextlib import closing
 from pathlib import Path
 
 from src.analytics.database import DEFAULT_DB_PATH, apply_migrations, connect_database
+from src.config import DB_PATH_ENV_VAR, default_db_path
 from src.ingestion.coverage_loader import ingest_coverage_report
 
 
@@ -26,9 +27,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--db",
-        default=DEFAULT_DB_PATH,
+        default=default_db_path(),
         type=Path,
-        help=f"SQLite database path. Defaults to {DEFAULT_DB_PATH}.",
+        help=(
+            f"SQLite database path. Defaults to ${DB_PATH_ENV_VAR} "
+            f"or {DEFAULT_DB_PATH}."
+        ),
     )
     return parser
 
