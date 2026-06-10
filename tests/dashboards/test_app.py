@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from contextlib import closing
@@ -12,6 +13,7 @@ from src.analytics.database import apply_migrations, connect_database
 from src.analytics.static_metrics import collect_static_metrics
 from src.cli.cmd_serve_dashboard import main as serve_dashboard_main
 from src.dashboards.app import create_dashboard_app
+from src.ingestion.ci_loader import ingest_ci_report
 from src.ingestion.git_loader import ingest_git_repository
 
 
@@ -28,6 +30,7 @@ def test_dashboard_empty_state_renders_navigation() -> None:
     assert headers["Content-Type"] == "text/html; charset=utf-8"
     assert 'rel="icon"' in home_body
     assert "Top Risk Preview" not in home_body
+    assert "/ci" in home_body
     assert "summary-line" in home_body
     assert "Risk Leaderboard" in body
     assert "No risk rows available yet" in body
@@ -53,6 +56,7 @@ def test_dashboard_renders_seeded_repo_and_file_detail(tmp_path: Path) -> None:
         risk_status, _, risk_body = _request(app, "/risk")
         hotspots_status, _, hotspots_body = _request(app, "/hotspots")
         ownership_status, _, ownership_body = _request(app, "/ownership")
+        ci_status, _, ci_body = _request(app, "/ci")
         file_status, _, file_body = _request(
             app,
             "/file?repository_id=1&path=app.py",
@@ -61,12 +65,100 @@ def test_dashboard_renders_seeded_repo_and_file_detail(tmp_path: Path) -> None:
     assert risk_status == "200 OK"
     assert hotspots_status == "200 OK"
     assert ownership_status == "200 OK"
+    assert ci_status == "200 OK"
     assert file_status == "200 OK"
     assert "app.py" in risk_body
     assert "app.py" in hotspots_body
     assert "Ownership" in ownership_body
+    assert "Pipeline Health" in ci_body
     assert "File Detail: app.py" in file_body
     assert "Risk score" in file_body
+
+
+def test_dashboard_renders_ci_page_and_controls(tmp_path: Path) -> None:
+    repo = _init_repo(tmp_path / "repo")
+    _write(repo / "app.py", "def add(a, b):\n    return a + b\n")
+    _git(repo, "add", "app.py")
+    _git(repo, "commit", "-m", "Add app")
+
+    ci_report = tmp_path / "ci.json"
+    _write_ci_report(
+        ci_report,
+        {
+            "runs": [
+                {
+                    "pipeline_name": "Build",
+                    "run_key": "build-1",
+                    "branch": "main",
+                    "commit_hash": "abc123",
+                    "status": "passed",
+                    "started_at": "2026-05-17T10:00:00Z",
+                    "finished_at": "2026-05-17T10:05:00Z",
+                    "duration_seconds": 300,
+                    "jobs": [
+                        {
+                            "job_name": "unit",
+                            "status": "passed",
+                            "started_at": "2026-05-17T10:00:00Z",
+                            "finished_at": "2026-05-17T10:04:00Z",
+                            "duration_seconds": 240,
+                            "tests": [
+                                {
+                                    "test_name": "test_add",
+                                    "status": "passed",
+                                    "duration_seconds": 1.2,
+                                }
+                            ],
+                        }
+                    ],
+                },
+                {
+                    "pipeline_name": "Deploy",
+                    "run_key": "deploy-1",
+                    "branch": "main",
+                    "commit_hash": "abc124",
+                    "status": "failed",
+                    "started_at": "2026-05-18T10:00:00Z",
+                    "finished_at": "2026-05-18T10:09:00Z",
+                    "duration_seconds": 540,
+                    "jobs": [
+                        {
+                            "job_name": "deploy",
+                            "status": "failed",
+                            "started_at": "2026-05-18T10:00:00Z",
+                            "finished_at": "2026-05-18T10:09:00Z",
+                            "duration_seconds": 540,
+                            "failure_reason": "failed",
+                            "tests": [],
+                        }
+                    ],
+                },
+            ]
+        },
+    )
+
+    with closing(connect_database(":memory:", enable_wal=False)) as connection:
+        apply_migrations(connection)
+        ingest_git_repository(connection, repo)
+        ingest_ci_report(connection, repo, ci_report)
+        app = create_dashboard_app(connection)
+
+        ci_status, _, ci_body = _request(app, "/ci")
+        filtered_status, _, filtered_body = _request(
+            app,
+            "/ci?health_q=Deploy&run_q=Deploy&health_sort=pipeline_name&health_order=asc&run_sort=pipeline_name&run_order=asc",
+        )
+
+    assert ci_status == "200 OK"
+    assert filtered_status == "200 OK"
+    assert "Pipeline Health" in ci_body
+    assert "Recent Runs" in ci_body
+    assert "Build" in ci_body
+    assert "Deploy" in ci_body
+    assert "failure rate" in ci_body.lower()
+    assert "Build" not in filtered_body
+    assert "Deploy" in filtered_body
+    assert filtered_body.count("Deploy") >= 2
 
 
 def test_dashboard_filters_and_sorts_repository_table(tmp_path: Path) -> None:
@@ -203,6 +295,10 @@ def _init_repo(path: Path) -> Path:
 
 def _write(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
+
+
+def _write_ci_report(path: Path, payload: dict[str, object]) -> None:
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _git(repo: Path, *args: str) -> None:

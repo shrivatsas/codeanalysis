@@ -65,6 +65,8 @@ class DashboardApplication:
             return self._render_hotspots(start_response, query, method == "HEAD")
         if path in {"/ownership", "/ownership-summary"}:
             return self._render_ownership(start_response, query, method == "HEAD")
+        if path in {"/ci", "/ci-runs", "/pipeline-health"}:
+            return self._render_ci(start_response, query, method == "HEAD")
         if path in {"/file", "/files"}:
             return self._render_file_detail(
                 start_response,
@@ -336,6 +338,145 @@ class DashboardApplication:
             head_only,
         )
 
+    def _render_ci(
+        self,
+        start_response: Any,
+        query: dict[str, list[str]],
+        head_only: bool,
+    ) -> list[bytes]:
+        repository_id = self._parse_int(query.get("repository_id", [""])[0])
+        health_query = query.get("health_q", [""])[0]
+        health_sort = query.get("health_sort", ["failure_rate"])[0]
+        health_order = query.get("health_order", ["desc"])[0]
+        run_query = query.get("run_q", [""])[0]
+        run_sort = query.get("run_sort", ["started_at"])[0]
+        run_order = query.get("run_order", ["desc"])[0]
+        stats = self._fetch_one(
+            """
+            SELECT
+              (SELECT COUNT(DISTINCT repository_id) FROM pipeline_runs) AS repositories,
+              (SELECT COUNT(DISTINCT pipeline_name) FROM pipeline_runs) AS pipelines,
+              (SELECT COUNT(*) FROM pipeline_runs) AS runs,
+              (SELECT COUNT(*) FROM job_runs) AS jobs,
+              (SELECT COUNT(*) FROM test_results) AS tests
+            """
+        )
+        health_rows = self._ci_health_rows(
+            repository_id,
+            health_query,
+            health_sort,
+            health_order,
+        )
+        run_rows = self._ci_run_rows(
+            repository_id,
+            run_query,
+            run_sort,
+            run_order,
+        )
+        body = [
+            self._page_title("CI Pipeline Health"),
+            self._render_nav("ci", repository_id),
+            self._filter_banner(repository_id),
+            self._summary_line(
+                [
+                    ("Repositories", stats["repositories"]),
+                    ("Pipelines", stats["pipelines"]),
+                    ("Runs", stats["runs"]),
+                    ("Jobs", stats["jobs"]),
+                    ("Tests", stats["tests"]),
+                ]
+            ),
+            self._section(
+                "Pipeline Health",
+                self._render_table(
+                    (
+                        "Repository",
+                        "Pipeline",
+                        "Runs",
+                        "Passed",
+                        "Failed",
+                        "Failure Rate",
+                        "Avg Duration",
+                        "Latest Finished",
+                    ),
+                    health_rows,
+                    controls_html=self._table_controls(
+                        action="/ci",
+                        repository_id=repository_id,
+                        search_name="health_q",
+                        search_value=health_query,
+                        search_placeholder="Filter repositories or pipelines",
+                        sort_name="health_sort",
+                        sort_value=health_sort,
+                        sort_options=(
+                            ("failure_rate", "Failure rate"),
+                            ("total_runs", "Runs"),
+                            ("failed_runs", "Failed runs"),
+                            ("avg_duration_seconds", "Avg duration"),
+                            ("latest_finished_at", "Latest finished"),
+                            ("repository_name", "Repository"),
+                            ("pipeline_name", "Pipeline"),
+                        ),
+                        order_name="health_order",
+                        order_value=health_order,
+                    ),
+                    empty_message=(
+                        "No CI pipeline rows available yet. Import a CI report first."
+                    ),
+                ),
+            ),
+            self._section(
+                "Recent Runs",
+                self._render_table(
+                    (
+                        "Repository",
+                        "Pipeline",
+                        "Branch",
+                        "Status",
+                        "Started",
+                        "Finished",
+                        "Duration",
+                        "Jobs",
+                        "Tests",
+                    ),
+                    run_rows,
+                    controls_html=self._table_controls(
+                        action="/ci",
+                        repository_id=repository_id,
+                        search_name="run_q",
+                        search_value=run_query,
+                        search_placeholder="Filter repos, pipelines, branches",
+                        sort_name="run_sort",
+                        sort_value=run_sort,
+                        sort_options=(
+                            ("started_at", "Started"),
+                            ("finished_at", "Finished"),
+                            ("duration_seconds", "Duration"),
+                            ("status", "Status"),
+                            ("pipeline_name", "Pipeline"),
+                            ("branch", "Branch"),
+                            ("jobs", "Jobs"),
+                            ("tests", "Tests"),
+                            ("repository_name", "Repository"),
+                        ),
+                        order_name="run_order",
+                        order_value=run_order,
+                    ),
+                    empty_message=(
+                        "No CI run rows available yet. Import a CI report first."
+                    ),
+                ),
+            ),
+            self._section("How to Read CI", self._ci_guide()),
+        ]
+        return self._respond(
+            start_response,
+            "200 OK",
+            "text/html; charset=utf-8",
+            self._document("CI Pipeline Health", "".join(body)),
+            head_only,
+        )
+
     def _render_file_detail(
         self,
         start_response: Any,
@@ -459,6 +600,7 @@ class DashboardApplication:
             ("risk", "Risk", "/risk"),
             ("hotspots", "Hotspots", "/hotspots"),
             ("ownership", "Ownership", "/ownership"),
+            ("ci", "CI", "/ci"),
         ]
         links = []
         for item_key, label, href in items:
@@ -530,6 +672,7 @@ class DashboardApplication:
             ("Risk", "/risk?" + urlencode({"repository_id": repo_id})),
             ("Hotspots", "/hotspots?" + urlencode({"repository_id": repo_id})),
             ("Ownership", "/ownership?" + urlencode({"repository_id": repo_id})),
+            ("CI", "/ci?" + urlencode({"repository_id": repo_id})),
         ]
         link_html = "".join(
             f'<a class="nav-link active" href="{href}">{label}</a>'
@@ -677,6 +820,61 @@ class DashboardApplication:
                 continue
 
             if headers == (
+                "Repository",
+                "Pipeline",
+                "Runs",
+                "Passed",
+                "Failed",
+                "Failure Rate",
+                "Avg Duration",
+                "Latest Finished",
+            ):
+                repo_link = "/?" + urlencode({"repository_id": row["repository_id"]})
+                body_rows.append(
+                    "<tr>"
+                    f"<td><a href=\"{repo_link}\">"
+                    f"{html.escape(str(row['repository_name']))}</a></td>"
+                    f"<td>{html.escape(str(row['pipeline_name']))}</td>"
+                    f"<td>{self._format_number(row['total_runs'])}</td>"
+                    f"<td>{self._format_number(row['passed_runs'])}</td>"
+                    f"<td>{self._format_number(row['failed_runs'])}</td>"
+                    f"<td>{self._format_number(row['failure_rate'])}</td>"
+                    f"<td>{self._format_number(row['avg_duration_seconds'])}</td>"
+                    f"<td>{html.escape(str(row['latest_finished_at'] or 'Unknown'))}"
+                    "</td>"
+                    "</tr>"
+                )
+                continue
+
+            if headers == (
+                "Repository",
+                "Pipeline",
+                "Branch",
+                "Status",
+                "Started",
+                "Finished",
+                "Duration",
+                "Jobs",
+                "Tests",
+            ):
+                repo_link = "/?" + urlencode({"repository_id": row["repository_id"]})
+                body_rows.append(
+                    "<tr>"
+                    f"<td><a href=\"{repo_link}\">"
+                    f"{html.escape(str(row['repository_name']))}</a></td>"
+                    f"<td>{html.escape(str(row['pipeline_name']))}</td>"
+                    f"<td>{html.escape(str(row['branch'] or ''))}</td>"
+                    f"<td>{html.escape(str(row['status']))}</td>"
+                    f"<td>{html.escape(str(row['started_at'] or 'Unknown'))}</td>"
+                    f"<td>{html.escape(str(row['finished_at'] or 'Unknown'))}</td>"
+                    f"<td>{self._format_number(row['duration_seconds'])}</td>"
+                    f"<td>{self._format_number(row['jobs'])}</td>"
+                    f"<td>{self._format_number(row['tests'])}</td>"
+                    "</tr>"
+                )
+                continue
+
+            if headers == (
                 "Measured At",
                 "Covered",
                 "Total",
@@ -719,6 +917,122 @@ class DashboardApplication:
                 f"<dt>{html.escape(str(label))}</dt><dd>{html.escape(str(value))}</dd>"
             )
         return f'<dl class="definition-list">{"".join(items)}</dl>'
+
+    def _ci_health_rows(
+        self,
+        repository_id: int | None,
+        search_query: str,
+        sort_key: str,
+        order_value: str,
+    ) -> list[sqlite3.Row]:
+        clauses = []
+        parameters: list[Any] = []
+        if repository_id is not None:
+            clauses.append("pr.repository_id = ?")
+            parameters.append(repository_id)
+        if search_query:
+            clauses.append("(r.name LIKE ? OR pr.pipeline_name LIKE ?)")
+            like = f"%{search_query}%"
+            parameters.extend([like, like])
+        where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        sort_expr = self._normalize_sort(
+            sort_key,
+            {
+                "failure_rate": "failure_rate",
+                "total_runs": "total_runs",
+                "failed_runs": "failed_runs",
+                "avg_duration_seconds": "avg_duration_seconds",
+                "latest_finished_at": "latest_finished_at",
+                "repository_name": "repository_name",
+                "pipeline_name": "pipeline_name",
+            },
+            "failure_rate",
+        )
+        order_sql = self._normalize_order(order_value)
+        return self._fetch_rows(
+            f"""
+            SELECT
+              pr.repository_id,
+              r.name AS repository_name,
+              pr.pipeline_name,
+              pr.total_runs,
+              pr.passed_runs,
+              pr.failed_runs,
+              pr.failure_rate,
+              pr.avg_duration_seconds,
+              pr.latest_finished_at
+            FROM ci_pipeline_health AS pr
+            JOIN repositories AS r ON r.id = pr.repository_id
+            {where_sql}
+            ORDER BY {sort_expr} {order_sql}, repository_name ASC, pipeline_name ASC
+            """,
+            tuple(parameters),
+        )
+
+    def _ci_run_rows(
+        self,
+        repository_id: int | None,
+        search_query: str,
+        sort_key: str,
+        order_value: str,
+    ) -> list[sqlite3.Row]:
+        clauses = []
+        parameters: list[Any] = []
+        if repository_id is not None:
+            clauses.append("pr.repository_id = ?")
+            parameters.append(repository_id)
+        if search_query:
+            clauses.append(
+                "(r.name LIKE ? OR pr.pipeline_name LIKE ? OR pr.branch LIKE ?)"
+            )
+            like = f"%{search_query}%"
+            parameters.extend([like, like, like])
+        where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        sort_expr = self._normalize_sort(
+            sort_key,
+            {
+                "started_at": "started_at",
+                "finished_at": "finished_at",
+                "duration_seconds": "duration_seconds",
+                "status": "status",
+                "pipeline_name": "pipeline_name",
+                "branch": "branch",
+                "jobs": "jobs",
+                "tests": "tests",
+                "repository_name": "repository_name",
+            },
+            "started_at",
+        )
+        order_sql = self._normalize_order(order_value)
+        return self._fetch_rows(
+            f"""
+            SELECT
+              pr.repository_id,
+              r.name AS repository_name,
+              pr.pipeline_name,
+              pr.branch,
+              pr.status,
+              pr.started_at,
+              pr.finished_at,
+              pr.duration_seconds,
+              (
+                SELECT COUNT(*)
+                FROM job_runs AS jr
+                WHERE jr.pipeline_run_id = pr.id
+              ) AS jobs,
+              (
+                SELECT COUNT(*)
+                FROM test_results AS tr
+                JOIN job_runs AS jr ON jr.id = tr.job_run_id
+                WHERE jr.pipeline_run_id = pr.id
+              ) AS tests
+            FROM pipeline_runs AS pr
+            JOIN repositories AS r ON r.id = pr.repository_id
+            {where_sql}
+            ORDER BY {sort_expr} {order_sql}, repository_name ASC, pipeline_name ASC
+            """,
+            tuple(parameters),
+        )
 
     def _metric_guide(self) -> str:
         rows = [
@@ -802,6 +1116,42 @@ class DashboardApplication:
                 "</span>"
             )
         return f'<div class="summary-line">{"".join(items)}</div>'
+
+    def _ci_guide(self) -> str:
+        rows = [
+            (
+                "Failure rate",
+                "Share of recorded runs that failed. Higher means "
+                "a less stable pipeline.",
+                "Lower is better. Zero means the recorded runs all passed.",
+            ),
+            (
+                "Average duration",
+                "How long the pipeline usually takes to finish.",
+                "Lower is better for feedback loops. Watch for sudden jumps.",
+            ),
+            (
+                "Recent runs",
+                "The latest pipeline executions, with status, branch, and duration.",
+                "Use this to spot regressions and slowdowns quickly.",
+            ),
+        ]
+        body_rows = []
+        for metric, why, read in rows:
+            body_rows.append(
+                "<tr>"
+                f"<td><strong>{html.escape(metric)}</strong></td>"
+                f"<td>{html.escape(why)}</td>"
+                f"<td>{html.escape(read)}</td>"
+                "</tr>"
+            )
+        return (
+            '<table class="table">'
+            "<thead><tr><th>Signal</th><th>Why it matters</th>"
+            "<th>How to read it</th></tr></thead>"
+            f"<tbody>{''.join(body_rows)}</tbody>"
+            "</table>"
+        )
 
     def _section(self, title: str, content: str) -> str:
         return (

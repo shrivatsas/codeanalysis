@@ -11,7 +11,11 @@ def test_apply_migrations_creates_initial_schema() -> None:
     with closing(connect_database(":memory:", enable_wal=False)) as connection:
         applied = apply_migrations(connection)
 
-        assert applied == ["0001_initial.sql", "0002_risk_scoring.sql"]
+        assert applied == [
+            "0001_initial.sql",
+            "0002_risk_scoring.sql",
+            "0003_ci_cd.sql",
+        ]
         tables = {row["name"] for row in connection.execute("""
                 SELECT name
                 FROM sqlite_master
@@ -27,6 +31,9 @@ def test_apply_migrations_creates_initial_schema() -> None:
         "metrics_snapshot",
         "analysis_runs",
         "coverage_by_file",
+        "pipeline_runs",
+        "job_runs",
+        "test_results",
     }.issubset(tables)
 
 
@@ -35,6 +42,7 @@ def test_apply_migrations_is_idempotent() -> None:
         assert apply_migrations(connection) == [
             "0001_initial.sql",
             "0002_risk_scoring.sql",
+            "0003_ci_cd.sql",
         ]
         assert apply_migrations(connection) == []
 
@@ -42,7 +50,7 @@ def test_apply_migrations_is_idempotent() -> None:
             "SELECT COUNT(*) AS count FROM schema_migrations"
         ).fetchone()["count"]
 
-    assert migration_count == 2
+    assert migration_count == 3
 
 
 def test_apply_migrations_rejects_changed_migration(tmp_path: Path) -> None:

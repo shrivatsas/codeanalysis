@@ -33,7 +33,25 @@ task test
      --db data/codeanalysis-emr-api.db
    ```
 
-4. Start the dashboard.
+4. Download a CI/CD summary from GitHub Actions when you want a fresh report.
+   ```bash
+   uv run python -m src.cli.cmd_download_ci \
+     --repo owner/name \
+     --output ci.json
+   ```
+   This requires the GitHub CLI (`gh`) to be installed and authenticated
+   (`gh auth status` / `gh auth login`). The repository slug must be in
+   `owner/name` form.
+
+5. Import CI/CD summaries when you have a JSON report.
+   ```bash
+   uv run python -m src.cli.cmd_ingest_ci \
+     --repo ~/Documents/houseworks/emr/emr-api \
+     --ci-file /path/to/ci.json \
+     --db data/codeanalysis-emr-api.db
+   ```
+
+6. Start the dashboard.
    ```bash
    task dashboard
    ```
